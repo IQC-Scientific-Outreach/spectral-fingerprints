@@ -325,6 +325,35 @@ const ELEMENTS = {
 };
 const ELEMENT_KEYS = ["He","N","O","Ne","Ar","Cl"]; // canonical iteration order for chip grids etc.
 
+/* ============================== SETTINGS (on/off switches) ============================== */
+// Behind-the-scenes switches for hiding parts of the app without deleting any code or content.
+// Flip a value and reload the page; flip it back to bring everything back exactly as it was.
+//   tabs:           false = that tab's button is hidden and the tab can't be opened.
+//                   ("explore" is the "Investigating atomic spectra" tab.)
+//   hiddenElements: element keys to hide *within* a given tab -- removed from that tab's
+//                   element picker, custom-mixture checkboxes, mask chips, test log and answer
+//                   dropdown. It does NOT remove the element's lines from preset mixtures
+//                   (e.g. Lab gas still contains Helium); it only hides the element as a choice.
+// At least one tab must stay enabled.
+const SETTINGS = {
+  tabs: {
+    explore: true,   // Investigation / Explore tab
+    labgas:  true,   // Mystery: Lab Gas
+    clone:   true    // Mystery: Hidden Word
+  },
+  hiddenElements: {
+    explore: [],     // e.g. ["He"] hides Helium in the Investigation / Explore tab
+    labgas:  [],
+    clone:   []
+  }
+};
+// Elements that may be offered as choices in the given tab, in canonical order.
+function visibleElements(tab){
+  const hidden = (SETTINGS.hiddenElements && SETTINGS.hiddenElements[tab]) || [];
+  return ELEMENT_KEYS.filter(k => !hidden.includes(k));
+}
+function tabEnabled(tab){ return !SETTINGS.tabs || SETTINGS.tabs[tab] !== false; }
+
 // Concentrations (%, not necessarily summing to 100) for the three built-in mixtures. These
 // numbers only affect how faint/bright each element's lines are drawn (see buildMixLines) and
 // how much each element contributes to the "apparent colour" glow -- they don't change which
@@ -440,7 +469,7 @@ function getReferenceLines(){
     else if (state.refMode === "element") mix = { [state.refElement]: 100 };
     else if (state.refMode === "custom"){
       mix = {};
-      state.customElements.forEach(k => mix[k] = 100);
+      state.customElements.forEach(k => { if (visibleElements("explore").includes(k)) mix[k] = 100; });
       flatAlpha = true;
     }
   }
@@ -457,7 +486,10 @@ function referenceLabel(){
   if (state.refMode === "air") return "Air";
   if (state.refMode === "labgas") return "Lab gas mixture";
   if (state.refMode === "clone") return "Hidden word mixture";
-  if (state.refMode === "custom") return "Custom mixture: " + (state.customElements.size ? [...state.customElements].join(" + ") : "(none selected)");
+  if (state.refMode === "custom"){
+    const shown = [...state.customElements].filter(k => visibleElements("explore").includes(k));
+    return "Custom mixture: " + (shown.length ? shown.join(" + ") : "(none selected)");
+  }
   return ELEMENTS[state.refElement].name;
 }
 
@@ -675,7 +707,16 @@ function renderAll(){
   // clamp/reset scroll position; capture and restore it so the page doesn't jump (this was
   // especially noticeable when toggling Custom Mixture checkboxes further down the page).
   const scrollY = window.scrollY;
+  // Respect SETTINGS: never show a switched-off tab, and drop any selection that points at an
+  // element hidden in the current tab. Other saved state (test logs, guesses) is left untouched.
+  if (!tabEnabled(state.mode)){
+    state.mode = ["explore","labgas","clone"].find(tabEnabled) || "explore";
+  }
+  const allowed = visibleElements(state.mode);
+  if (state.maskElement && !allowed.includes(state.maskElement)) state.maskElement = null;
+  if (state.mode === "explore" && !allowed.includes(state.refElement)) state.refElement = allowed[0];
   document.querySelectorAll(".mode-switch button").forEach(b=>{
+    b.hidden = !tabEnabled(b.dataset.mode);
     b.classList.toggle("active", b.dataset.mode === state.mode);
   });
   const main = document.getElementById("main-col");
@@ -730,7 +771,7 @@ function renderExplore(main, side){
   // a single-element picker, or a multi-select for building an arbitrary custom blend.
   if (state.refMode === "element"){
     const grid = el("div","chip-grid");
-    ELEMENT_KEYS.forEach(k=>{
+    visibleElements("explore").forEach(k=>{
       const chip = el("div","chip" + (state.refElement===k?" active":""));
       chip.innerHTML = `<span class="dot" style="background:${ELEMENTS[k].swatch}"></span>${ELEMENTS[k].name}`;
       chip.onclick = ()=>{ state.refElement = k; renderAll(); };
@@ -742,7 +783,7 @@ function renderExplore(main, side){
   if (state.refMode === "custom"){
     const box = el("div","field");
     box.appendChild(el("label","field-label","Combine elements"));
-    ELEMENT_KEYS.forEach(k=>{
+    visibleElements("explore").forEach(k=>{
       const line = el("label","checkline");
       const cb = document.createElement("input"); cb.type="checkbox"; cb.checked = state.customElements.has(k);
       cb.onchange = ()=>{ cb.checked ? state.customElements.add(k) : state.customElements.delete(k); renderAll(); };
@@ -761,7 +802,7 @@ function renderExplore(main, side){
   const noMaskChip = el("div","chip" + (state.maskElement===null?" active":""), "No mask");
   noMaskChip.onclick = ()=>{ state.maskElement = null; renderAll(); };
   mgrid.appendChild(noMaskChip);
-  ELEMENT_KEYS.forEach(k=>{
+  visibleElements("explore").forEach(k=>{
     const chip = el("div","chip" + (state.maskElement===k?" active":""));
     chip.innerHTML = `<span class="dot" style="background:${ELEMENTS[k].swatch}"></span>${ELEMENTS[k].name}`;
     chip.onclick = ()=>{ state.maskElement = k; renderAll(); };
@@ -840,7 +881,7 @@ function renderLabGas(main, side){
   const noMaskChip = el("div","chip" + (state.maskElement===null?" active":""), "No mask");
   noMaskChip.onclick = ()=>{ state.maskElement = null; renderAll(); };
   grid.appendChild(noMaskChip);
-  ELEMENT_KEYS.forEach(k=>{
+  visibleElements("labgas").forEach(k=>{
     const chip = el("div","chip" + (state.maskElement===k?" active":""));
     chip.innerHTML = `<span class="dot" style="background:${ELEMENTS[k].swatch}"></span>${ELEMENTS[k].name}`;
     chip.onclick = ()=>{ state.maskElement = k; renderAll(); };
@@ -853,7 +894,7 @@ function renderLabGas(main, side){
   const s2 = el("div","panel");
   s2.appendChild(el("h3",null,"Test log"));
   const log = el("div","test-log");
-  ELEMENT_KEYS.forEach(k=>{
+  visibleElements("labgas").forEach(k=>{
     const tested = k in state.labTested;
     const row = el("div","test-row " + (tested ? (state.labTested[k]?"match":"nomatch") : "untested"));
     row.innerHTML = `<span>${ELEMENTS[k].name}</span><span class="stat">${tested ? (state.labTested[k]?"Match":"No match") : "Untested"}</span>`;
@@ -873,7 +914,7 @@ function renderLabGas(main, side){
   // N/O/Ar are deliberately excluded from the options: they're always present in air, so
   // offering them as guesses would just be a distractor with an obviously-wrong answer rather
   // than a meaningful choice between "found a real contaminant candidate" options.
-  ELEMENT_KEYS.filter(k=>!["N","O","Ar"].includes(k)).forEach(k=>{
+  visibleElements("labgas").filter(k=>!["N","O","Ar"].includes(k)).forEach(k=>{
     const o = el("option", null, ELEMENTS[k].name); o.value=k; gsel.appendChild(o);
   });
   gsel.value = state.labGuess || "";
@@ -957,7 +998,7 @@ function renderClone(main, side){
   const noMaskChip = el("div","chip" + (state.maskElement===null?" active":""), "No mask");
   noMaskChip.onclick = ()=>{ state.maskElement = null; renderAll(); };
   grid.appendChild(noMaskChip);
-  ELEMENT_KEYS.forEach(k=>{
+  visibleElements("clone").forEach(k=>{
     const chip = el("div","chip" + (state.maskElement===k?" active":""));
     chip.innerHTML = `<span class="dot" style="background:${ELEMENTS[k].swatch}"></span>${ELEMENTS[k].name}`;
     chip.onclick = ()=>{ state.maskElement = k; renderAll(); };
@@ -970,7 +1011,7 @@ function renderClone(main, side){
   const s2 = el("div","panel");
   s2.appendChild(el("h3",null,"Test log"));
   const log = el("div","test-log");
-  ELEMENT_KEYS.forEach(k=>{
+  visibleElements("clone").forEach(k=>{
     const tested = k in state.cloneTested;
     const row = el("div","test-row " + (tested ? (state.cloneTested[k]?"match":"nomatch") : "untested"));
     row.innerHTML = `<span>${ELEMENTS[k].name}</span><span class="stat">${tested ? (state.cloneTested[k]?"Match":"No match") : "Untested"}</span>`;
