@@ -302,6 +302,12 @@
 // before going out publicly. Flip this to false to pull it from the tab bar entirely; flip back
 // to true once it's been checked. Nothing else about the app depends on this.
 const ENABLE_INSPECTION = true;
+// Helium inside Inspection mode only. Flip to false to hide the Helium option there (leaving
+// just Hydrogen, with its exact Bohr model / Rydberg-formula lines) while Helium's transition
+// data is being checked. This does NOT touch Helium anywhere else -- it stays in Explore's
+// references and masks and in both mystery puzzles. No data is deleted; flip back to true to
+// restore it.
+const ENABLE_INSPECTION_HELIUM = true;
 
 /* ======================================================================
    SPECTRAL FINGERPRINTS TRAINER -- overview
@@ -1504,14 +1510,21 @@ function renderInspect(main, side){
   p.appendChild(el("h2",null,"Inside the atom"));
   p.appendChild(el("p","sub","Click a line in the spectrum below to see the electron transition that produced it."));
 
+  // Which elements Inspection offers -- Helium only while its feature flag above is on. If a
+  // stale state.inspectElement points at a switched-off element, fall back to Hydrogen.
+  const inspectElements = ENABLE_INSPECTION_HELIUM ? ["H","He"] : ["H"];
+  if (!inspectElements.includes(state.inspectElement)){
+    state.inspectElement = "H"; state.inspectSelectedIndex = null;
+  }
   const toggleRow = el("div","chip-grid");
-  ["H","He"].forEach(k=>{
+  inspectElements.forEach(k=>{
     const chip = el("div","chip" + (state.inspectElement===k?" active":""));
     chip.innerHTML = `<span class="dot" style="background:${ELEMENTS[k].swatch}"></span>${ELEMENTS[k].name}`;
     chip.onclick = ()=>{ state.inspectElement = k; state.inspectSelectedIndex = null; state.inspectViewMode = "grotrian"; renderAll(); };
     toggleRow.appendChild(chip);
   });
-  p.appendChild(toggleRow);
+  // A one-option picker is pointless, so only show it when there's actually a choice.
+  if (inspectElements.length > 1) p.appendChild(toggleRow);
 
   const isHydrogen = state.inspectElement === "H";
   const note = el("div","intro-box");
