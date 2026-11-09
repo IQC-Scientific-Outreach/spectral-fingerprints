@@ -559,6 +559,12 @@ const HELIUM_LEVEL_ENERGY_EV = {
 // violet for the ultraviolet side, matching how these regions are conventionally suggested in
 // diagrams (there's no "real" colour to show; human eyes can't see either). Both branches are
 // genuinely used: 294.6/318.9/361.5nm (2s<->np, n=4,5) are near-UV lines (predicted values).
+// The spectrum card only draws 380-700nm, but human vision reaches to roughly 750nm (dim, deep
+// red). So "not on the card" is NOT the same as "invisible": 706.5nm and 728.1nm are real,
+// visible deep-red lines that simply fall past the card's right edge. EYE_MAX is used to tell
+// the two cases apart in labels and colours; only lines beyond it are called infrared.
+const EYE_MAX = 750;
+function lightBand(w){ return w < WMIN ? "uv" : (w > EYE_MAX ? "ir" : "visible"); }
 function offVisibleColor(w){
   return w > WMAX ? "rgb(150,102,63)" : "rgb(200,175,222)";
 }
@@ -1397,9 +1403,10 @@ function buildEnergyLevelSVG(transitions, selectedIndex, cfg){
   // Each transition gets its own x slot within its family's band, ordered left-to-right by
   // increasing wavelength (i.e. decreasing photon energy) -- so the highest-energy line in a
   // family is always leftmost, and no two transitions can ever share an x position. Transitions
-  // outside the visible window (t.visible === false) are drawn dashed, in a colour signalling
-  // which side of the visible spectrum they're on (see offVisibleColor), since there's no real
-  // colour to show for light nobody can see.
+  // in the ultraviolet or infrared (see lightBand) are drawn dashed, in a colour signalling which
+  // side of the visible spectrum they're on (see offVisibleColor), since there's no real colour
+  // to show for light nobody can see. Deep-red lines past the card's 700nm edge are still
+  // visible light, so they keep their real colour and a solid line.
   cfg.families.forEach(fam=>{
     const indices = transitions.map((t,i)=>({t,i})).filter(o=>cfg.getFamily(o.t)===fam);
     indices.sort((a,b)=>a.t.w-b.t.w);
@@ -1409,7 +1416,7 @@ function buildEnergyLevelSVG(transitions, selectedIndex, cfg){
       const x = x0 + (slot+0.5) * (x1-x0)/n;
       const { t, i } = o;
       const yTop = yByFamily[fam][cfg.getUpperKey(t)], yBottom = yByFamily[fam][cfg.getLowerKey(t)];
-      const isOffVisible = t.visible === false;
+      const isOffVisible = lightBand(t.w) !== "visible";   // UV/IR only; off-card deep red keeps its real colour
       const color = isOffVisible ? offVisibleColor(t.w) : wavelengthToRGB(t.w);
       const isSelected = selectedIndex === i;
       const dash = isOffVisible ? ` stroke-dasharray="5 3"` : "";
@@ -1598,8 +1605,13 @@ function renderInspect(main, side){
       else if (t.predicted) explanation += ` (<b>predicted</b>).`;
       else explanation += ` (calculated from the energy levels).`;
       if (t.visible === false){
-        const side2 = t.w > WMAX ? "infrared" : "ultraviolet";
-        explanation += ` That's ${t.w > WMAX ? "beyond red" : "beyond violet"} \u2014 in the near-${side2}, invisible to the eye, so it can't be shown on the spectrum card above.`;
+        const band = lightBand(t.w);
+        if (band === "visible"){
+          explanation += ` That's deep red light near the edge of human vision \u2014 visible, but past the 700&nbsp;nm right-hand edge of the spectrum card above, so it isn't drawn there.`;
+        } else {
+          const side2 = band === "ir" ? "infrared" : "ultraviolet";
+          explanation += ` That's ${band === "ir" ? "beyond red" : "beyond violet"} \u2014 in the near-${side2}, invisible to the eye, so it can't be shown on the spectrum card above.`;
+        }
       }
       const refLink = key => { const r = HELIUM_REFERENCES[key]; return `<a href="${r.url}" target="_blank" rel="noopener">${r.name}</a>`; };
       if (t.predicted){
@@ -1641,7 +1653,8 @@ function renderInspect(main, side){
     const row = el("div","test-row" + (selected ? " selected" : ""));
     row.style.cursor = "pointer";
     const label = isHydrogen ? `n=${t.nHigh} \u2192 n=${t.nLow}` : `${t.upperOrbital} \u2192 ${t.lowerOrbital}`;
-    const rangeTag = t.visible === false ? (t.w > WMAX ? " (IR)" : " (UV)") : "";
+    const band = lightBand(t.w);
+    const rangeTag = band === "ir" ? " (IR)" : band === "uv" ? " (UV)" : (t.visible === false ? " (deep red, off card)" : "");
     const dashTag = t.predicted ? " \u00b7 predicted" : "";
     row.innerHTML = `<span>${label}${rangeTag}${dashTag}</span><span class="stat">${t.predicted !== undefined ? formatTransitionNm(t) : "\u2248" + t.w.toFixed(1) + " nm"}</span>`;
     row.onclick = ()=>{ state.inspectSelectedIndex = i; renderAll(); };
