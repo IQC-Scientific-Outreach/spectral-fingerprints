@@ -292,13 +292,13 @@
     <div id="side-col"></div>
   </div>
 
-  <footer class="credits">Simulator for the <i>Spectral Fingerprints</i> activity in <a href="https://uwaterloo.ca/institute-for-quantum-computing/outreach/quantum-educators/teacher-resources" target="_blank" rel="noopener">Quantum Detectives</a><br>Published by the Scientific Outreach Team at the <a href="https://uwaterloo.ca/iqc" target="_blank" rel="noopener">Institute for Quantum Computing</a>, University of Waterloo<br>Emission wavelengths from the <a href="https://physics.nist.gov/PhysRefData/ASD/lines_form.html" target="_blank" rel="noopener">NIST Atomic Spectra Database</a>. Helium transition assignments from <a href="https://www.vernier.com/vernier-ideas/a-quantitative-investigation-of-the-helium-spectrum/" target="_blank" rel="noopener">Vernier</a> and <a href="https://pubs.aip.org/aapt/ajp/article/77/10/920/1044617/Introductory-helium-atomic-spectrum-analysis" target="_blank" rel="noopener">Abramzon &amp; Siegel (2009)</a>.</footer>
+  <footer class="credits">Simulator for the <i>Spectral Fingerprints</i> activity in <a href="https://uwaterloo.ca/institute-for-quantum-computing/outreach/quantum-educators/teacher-resources" target="_blank" rel="noopener">Quantum Detectives</a><br>Published by the Scientific Outreach Team at the <a href="https://uwaterloo.ca/iqc" target="_blank" rel="noopener">Institute for Quantum Computing</a>, University of Waterloo<br>Emission wavelengths from the <a href="https://physics.nist.gov/PhysRefData/ASD/lines_form.html" target="_blank" rel="noopener">NIST Atomic Spectra Database</a>. Inspection mode: hydrogen lines calculated from the Rydberg formula; helium energy levels from the <a href="https://physics.nist.gov/PhysRefData/ASD/levels_form.html" target="_blank" rel="noopener">NIST Atomic Spectra Database</a>; measured helium line assignments from <a href="https://doi.org/10.3390/atoms11060094" target="_blank" rel="noopener">Lin, Goto &amp; Akatsuka (2023)</a> and <a href="https://doi.org/10.1119/1.3086029" target="_blank" rel="noopener">Abramzon &amp; Siegel (2009)</a>; all other helium lines are predictions.</footer>
 </div>
 
 <script>
 // ==== FEATURE FLAG ====
 // Inspection mode (the clickable Bohr-model / energy-level diagrams) is new and its physics
-// data -- especially Helium's 46 predicted/confirmed transitions -- needs independent review
+// data -- especially Helium's 46 transitions (mostly predicted; see HELIUM_TRANSITIONS) -- needs independent review
 // before going out publicly. Flip this to false to pull it from the tab bar entirely; flip back
 // to true once it's been checked. Nothing else about the app depends on this.
 const ENABLE_INSPECTION = true;
@@ -391,23 +391,25 @@ const WMIN = 380, WMAX = 700, WRANGE = WMAX - WMIN;   // visible-light window dr
 const TOLERANCE_NM = 0.15;
 
 /* ===================== Inspection mode: Bohr-model transition data =====================
-   Hydrogen is the ONE atom the simple Bohr model gets exactly right: its energy levels really
-   are E_n = -13.6 eV/n^2, so every visible line corresponds to a real, calculable n(upper) ->
-   n(lower) jump. We compute its lines directly from the Rydberg formula below rather than
-   hard-coding wavelengths, since for hydrogen that formula is not an approximation.
+   Hydrogen is the ONE atom the simple Bohr model gets essentially right: its energy levels are
+   E_n = -13.6 eV/n^2 (to within tiny relativistic/fine-structure corrections), so every visible
+   line corresponds to a calculable n(upper) -> n(lower) jump. We CALCULATE its lines from the
+   Rydberg formula below rather than looking them up, and the UI labels them as calculated.
 
-   Helium is NOT hydrogen-like (two electrons -- no closed-form Bohr solution exists), so its
-   "n" values below are real principal quantum numbers taken from published spectroscopic
-   term assignments (confirmed via literature search: e.g. Gigosos & Gonzalez, A&A 2009, for
-   447.1nm=2-4 and 402.6nm=2-5; multiple sources for the 2-3 sextet at 388.9/501.6/587.6/667.8nm).
-   The Bohr *circles* cartoon we draw from them is still a simplification -- it can't show the
-   singlet/triplet splitting or l-dependence that real helium has -- which is exactly why
-   Inspection mode labels Helium's diagram as illustrative rather than exact. */
+   Helium is NOT hydrogen-like (two electrons -- no closed-form Bohr solution exists). Its level
+   energies come from the NIST Atomic Spectra Database, and each transition is labelled in the
+   UI as either MEASURED (a cited source gives both the wavelength and this exact assignment) or
+   PREDICTED (calculated here from the NIST levels; no source checked identifies it). See the
+   "Sourcing" notes above HELIUM_REFERENCES for exactly what each source was checked for.
+   The Bohr *circles* cartoon is still a simplification -- it can't show singlet/triplet
+   splitting or l-dependence -- which is why Inspection mode labels Helium's diagram as
+   illustrative rather than exact. */
 
 // Rydberg formula: 1/lambda = R*(1/nLow^2 - 1/nHigh^2). R here is the Rydberg constant *for
 // hydrogen specifically* (i.e. already corrected for the proton's finite mass, not the R-infinity
-// value used for an infinitely heavy nucleus), so this reproduces the textbook Balmer wavelengths
-// (656.3, 486.1, 434.0, 410.2nm, ...) to within a fraction of a nanometre.
+// value used for an infinitely heavy nucleus). NOTE: this gives VACUUM wavelengths (656.5, 486.3,
+// 434.1, 410.3nm), about 0.1-0.2nm longer than the commonly quoted air values (656.3, 486.1,
+// 434.0, 410.2nm). They are calculated values and are labelled as such in the UI.
 function rydbergWavelengthNm(nLow, nHigh){
   const R = 1.09677583e7; // m^-1
   const invLambdaM = R * (1/(nLow*nLow) - 1/(nHigh*nHigh));
@@ -421,137 +423,120 @@ const HYDROGEN_BALMER = [3,4,5,6].map(nHigh => ({
   nLow: 2, nHigh, w: rydbergWavelengthNm(2, nHigh)
 }));
 
-// Maps each visually-distinct Helium line to its real (nLow -> nHigh) principal quantum
-// numbers, AND its specific orbital letters -- e.g. "3d" not just "n=3" -- since the n-only
-// simplification turned out to genuinely mislead: 388.9nm and 587.6nm are both "triplet, n=3",
-// but 587.6nm (3d->2p) releases MORE energy than 402.6nm (5d->2p) despite its lower n, precisely
-// because 388.9nm is actually a 2s->3p jump (a different pair of levels entirely, sharing only
-// the label "n=3") rather than another nd->2p jump. Once orbital letters are shown, that stops
-// being confusing: it's visibly a different kind of transition.
+// Every dipole-allowed (deltaL=+-1, deltaS=0) transition among the eleven s/p/d levels (n=2-5)
+// in HELIUM_LEVEL_ENERGY_EV, labelled with specific orbitals (e.g. "3d" not just "n=3"): 388.9nm
+// (2s->3p) and 587.6nm (3d->2p) are both "n=3" but are genuinely different kinds of jump.
 //
-// This is every dipole-allowed (deltaL=+-1, deltaS=0) transition among ALL eleven s/p/d levels
-// (n=2-5) HELIUM_LEVEL_ENERGY_EV tracks -- not just the ones that happen to be visible. Each is
-// tagged `visible: false` if it falls outside 380-700nm (so buildInspectCard knows not to try to
-// place it on the spectrum bar, and buildEnergyLevelSVG draws it dashed, in a colour that
-// signals "off the visible spectrum" -- brown for infrared, pale violet for ultraviolet -- rather
-// than the line's true, unseeable colour), and `confirmed: false` if this app computed its
-// wavelength from the level energies below rather than finding that specific transition
-// independently named in a source.
+// Two categories of otherwise-allowed transition are deliberately EXCLUDED: same-n p<->d (e.g.
+// 3p<->3d, levels only ~0.01-0.1eV apart) and same-n s<->p at n=4 and n=5 -- both land deep in
+// the far infrared. The n=3 s<->p pair (3s<->3p) is kept.
 //
-// Two categories of otherwise-allowed transition are deliberately EXCLUDED:
-//  - Same-n p<->d (e.g. 3p<->3d): these two levels sit only 0.01-0.1eV apart in both families,
-//    so although the level energies themselves are now precise (NIST-sourced), the physical
-//    transition is so low-energy it's arguably not meaningfully "near" anything -- deep
-//    far-infrared (tens of microns) -- and not something a real spectrometer would resolve.
-//  - Same-n s<->p pairs at n=4 and n=5 (e.g. 4s<->4p, 5s<->5p): for the same reason, these land
-//    at 11,000-36,000nm -- multiple times deeper than every other line here. The n=3 version of
-//    this same pair (3s<->3p) is kept, at "only" ~4,300-7,400nm, as the one far-infrared outlier
-//    included for consistency with the rest of the principal/sharp/diffuse series.
+// Each entry has:
+//  - `calc`: wavelength (nm) CALCULATED by this app from the rounded NIST level energies below.
+//    Because the levels are rounded to 0.001eV and averaged over fine structure, this can differ
+//    from the measured wavelength by a few tenths of a nm.
+//  - `sources`: what a cited source actually says about THIS transition. A source is only listed
+//    if it was checked (Nov 2026) to identify this specific transition (both levels), not merely
+//    to list a nearby wavelength. `nm` is the wavelength exactly as printed in that source, or
+//    null if the source names the transition without a wavelength we can quote.
+//  - No sources => the line is a PREDICTION from the NIST levels, and is labelled as such.
 //
-// Sourcing:
-//  - Diffuse series (nd -> 2p): 587.6/667.8 (n=3), 447.1/492.2 (n=4), 402.6/438.8 (n=5) --
-//    confirmed via Abramzon & Siegel, "Introductory helium atomic spectrum analysis," Am. J.
-//    Phys. 77, 920-922 (2009).
-//  - Principal series (2s -> np): 388.9nm confirmed as 2 3S1 -> 3 3P2 in Koelemeij, Stas,
-//    Hogervorst & Vassen, "Magneto-optical trap for metastable helium at 389 nm," Phys. Rev. A
-//    67, 053406 (2003) [an earlier version of this file mis-cited this as "Phys. Rev. A 76,
-//    023413 (2007)" -- corrected]. 501.6nm (n=3), 396.5nm (n=4) and 318.8nm (n=4, triplet) are
-//    confirmed via Abramzon & Siegel's own measured 18-line table, which lists several lines
-//    this app originally couldn't identify -- they turn out to be exactly these principal-series
-//    members once the full n=2-5 level set is available. 361.8nm (n=5, singlet) and 412.1nm
-//    (n=5, triplet) match the same table's remaining previously-unidentified lines to within
-//    0.3nm. Two lines in that 18-line table (382.0nm, 370.5nm) are n=6/n=7 diffuse-series members
-//    and fall outside the n<=5 range this app tracks, so remain unexplained here by design.
-//  - Sharp series (2p -> ns): 471.3nm (n=4 triplet), 706.5nm/728.1nm (n=3, both families) and
-//    504.8nm (n=4 singlet -- genuinely VISIBLE) are confirmed via a real measured-plasma line
-//    set matching these exact wavelengths in Wu et al., "Improved Line Intensity Analysis of
-//    Neutral Helium by Incorporating the Reabsorption Processes in a Helium Collisional-
-//    Radiative Model," Atoms 11(6), 94 (2023).
-//  - 2s -> 2p (both families): triplet at ~1083nm, one of the most famous lines in atomic
-//    physics (used in MRI hyperpolarisation, laser cooling, etc.), precisely measured in Cancio
-//    Pastor et al., "Absolute frequency measurements of the 2 3S1 -> 2 3P0,1,2 atomic helium
-//    transitions around 1083 nm," Phys. Rev. Lett. 92, 023001 (2004). Its singlet counterpart is
-//    independently, precisely measured at 2058nm in Luo, Peng, Shy & Wang, "Precision frequency
-//    metrology of helium 2 1S0 -> 2 1P1 transition," Phys. Rev. Lett. 111, 013002 (2013) --
-//    matching this app's own derived 2056.1nm to 0.1%.
-//  - Everything else (`confirmed: false`) is this app's own prediction from the NIST-sourced
-//    levels below (Salhi & Jelassi 2017 -- see HELIUM_LEVEL_ENERGY_EV), not a value found in any
-//    source; treat the wavelength as an estimate.
-//
-// IMPORTANT CORRECTION (kept for the record): an earlier version of this file derived 3s's
-// energy backwards, treating the FIRST term in a citation like "1s2p3P-1s3s3S" as the
-// higher-energy one. Standard spectroscopic notation is the opposite -- the lower-energy term
-// is written first -- so 3s is actually MORE tightly bound than 2p, not less. That mistake had
-// also produced a spurious "near-ultraviolet" 3s<->3p line; correctly computed, that transition
-// is deep infrared instead (see 3s<->3p above/below). The near-UV lines that DO appear below
-// (294.6/318.9/361.5nm) come from a different, correctly-derived series (2s<->np for n=4,5) and
-// were confirmed against Abramzon & Siegel's measured table as described above.
-//
-// HELIUM_REFERENCES gives each confirmed source a short key and a real, clickable URL, so the
-// Inspection tab can link directly to whichever paper backs up the currently-selected line --
-// the goal being that every claim this diagram makes can be checked by a reader in one click,
-// not just taken on faith from a code comment.
+// Sources checked, and exactly what each supports:
+//  - lin:       Lin, Goto & Akatsuka, Atoms 11, 94 (2023), Table 1: eight measured lines with
+//               full assignments -- 728.135 (3 1S->2 1P), 706.525 (3 3S->2 3P), 501.568
+//               (3 1P->2 1S), 388.864 (3 3P->2 3S), 667.815 (3 1D->2 1P), 587.566 (3 3D->2 3P),
+//               492.193 (4 1D->2 1P), 447.150 (4 3D->2 3P).
+//  - abramzon:  Abramzon & Siegel, Am. J. Phys. 77, 920 (2009). Its Table I lists 18 measured
+//               wavelengths, but the paper only ASSIGNS the "1s nd -> 1s2p" lines (triplet
+//               n=3-7, singlet n=3-6). Only those assignments are used here (n<=5). Its other
+//               measured lines are NOT used as confirmation of anything.
+//  - koelemeij: Koelemeij et al., Phys. Rev. A 67, 053406 (2003): 2 3S1 -> 3 3P2 at 389 nm.
+//  - cancio:    Cancio Pastor et al., Phys. Rev. Lett. 92, 023001 (2004): 2 3S1 -> 2 3P0,1,2
+//               "around 1083 nm".
+//  - luo:       Luo et al., Phys. Rev. Lett. 111, 013002 (2013): the 2 1S0 -> 2 1P1 transition
+//               (no wavelength quoted here, as we could only verify the title).
+//  - nist:      NIST Atomic Spectra Database, He I energy levels -- the source of every level
+//               energy in HELIUM_LEVEL_ENERGY_EV (checked against NIST directly, all within
+//               0.0005eV). Not a source for any individual line.
+// Removed in the Nov 2026 citation audit (do not re-add without checking the source itself):
+// "Wu et al., Atoms 11(6), 94 (2023)" (wrong authors -- the paper is Lin, Goto & Akatsuka, and
+// it does not contain 504.8, 471.3 or 412.1nm); Abramzon & Siegel as confirmation of 318.8,
+// 361.8, 396.5, 501.6 or 388.9nm (they measure these but do not assign them); Gigosos &
+// Gonzalez, A&A 2009 (about the 447.1nm line only; it was cited for 402.6nm too).
 const HELIUM_REFERENCES = {
-  abramzon:  { name: "Abramzon & Siegel, Am. J. Phys. 77, 920 (2009)", url: "https://pubs.aip.org/aapt/ajp/article/77/10/920/1044617/Introductory-helium-atomic-spectrum-analysis" },
+  lin:       { name: "Lin, Goto & Akatsuka, Atoms 11, 94 (2023)", url: "https://doi.org/10.3390/atoms11060094" },
+  abramzon:  { name: "Abramzon & Siegel, Am. J. Phys. 77, 920 (2009)", url: "https://doi.org/10.1119/1.3086029" },
   koelemeij: { name: "Koelemeij et al., Phys. Rev. A 67, 053406 (2003)", url: "https://doi.org/10.1103/PhysRevA.67.053406" },
   cancio:    { name: "Cancio Pastor et al., Phys. Rev. Lett. 92, 023001 (2004)", url: "https://doi.org/10.1103/PhysRevLett.92.023001" },
   luo:       { name: "Luo et al., Phys. Rev. Lett. 111, 013002 (2013)", url: "https://doi.org/10.1103/PhysRevLett.111.013002" },
-  atoms2023: { name: "Wu et al., Atoms 11(6), 94 (2023)", url: "https://doi.org/10.3390/atoms11060094" },
-  salhi:     { name: "Salhi & Jelassi, Orient. J. Phys. Sci. 2(2), 52 (2017) -- levels only, not this specific line", url: "https://www.orientaljphysicalsciences.org/pdf/vol2no2/OJPS_Vol2_No2_52-56.pdf" }
+  nist:      { name: "NIST Atomic Spectra Database (He I energy levels)", url: "https://physics.nist.gov/PhysRefData/ASD/levels_form.html" }
 };
 const HELIUM_TRANSITIONS = [
-  { w: 361.5,   family: "singlet", lowerOrbital: "2s", upperOrbital: "5p", confirmed: true, refs: ["abramzon"] },
-  { w: 396.5,   family: "singlet", lowerOrbital: "2s", upperOrbital: "4p", confirmed: true, refs: ["abramzon"] },
-  { w: 439.0,   family: "singlet", lowerOrbital: "2p", upperOrbital: "5d", confirmed: true, refs: ["abramzon"] },
-  { w: 443.9,   family: "singlet", lowerOrbital: "2p", upperOrbital: "5s", confirmed: false, refs: ["salhi"] },
-  { w: 492.4,   family: "singlet", lowerOrbital: "2p", upperOrbital: "4d", confirmed: true, refs: ["abramzon"] },
-  { w: 501.6,   family: "singlet", lowerOrbital: "2s", upperOrbital: "3p", confirmed: true, refs: ["abramzon"] },
-  { w: 505.0,   family: "singlet", lowerOrbital: "2p", upperOrbital: "4s", confirmed: true, refs: ["atoms2023"] },
-  { w: 668.0,   family: "singlet", lowerOrbital: "2p", upperOrbital: "3d", confirmed: true, refs: ["abramzon"] },
-  { w: 728.5,   family: "singlet", lowerOrbital: "2p", upperOrbital: "3s", confirmed: true, refs: ["atoms2023"] },
-  { w: 1102.1,  family: "singlet", lowerOrbital: "3s", upperOrbital: "5p", confirmed: false, refs: ["salhi"] },
-  { w: 1276.9,  family: "singlet", lowerOrbital: "3d", upperOrbital: "5p", confirmed: false, refs: ["salhi"] },
-  { w: 1298.3,  family: "singlet", lowerOrbital: "3p", upperOrbital: "5d", confirmed: false, refs: ["salhi"] },
-  { w: 1341.8,  family: "singlet", lowerOrbital: "3p", upperOrbital: "5s", confirmed: false, refs: ["salhi"] },
-  { w: 1508.3,  family: "singlet", lowerOrbital: "3s", upperOrbital: "4p", confirmed: false, refs: ["salhi"] },
-  { w: 1856.0,  family: "singlet", lowerOrbital: "3d", upperOrbital: "4p", confirmed: false, refs: ["salhi"] },
-  { w: 1910.4,  family: "singlet", lowerOrbital: "3p", upperOrbital: "4d", confirmed: false, refs: ["salhi"] },
-  { w: 2056.1,  family: "singlet", lowerOrbital: "2s", upperOrbital: "2p", confirmed: true, refs: ["luo"] },
-  { w: 2115.8,  family: "singlet", lowerOrbital: "3p", upperOrbital: "4s", confirmed: false, refs: ["salhi"] },
-  { w: 3332.9,  family: "singlet", lowerOrbital: "4s", upperOrbital: "5p", confirmed: false, refs: ["salhi"] },
-  { w: 4012.4,  family: "singlet", lowerOrbital: "4d", upperOrbital: "5p", confirmed: false, refs: ["salhi"] },
-  { w: 4132.8,  family: "singlet", lowerOrbital: "4p", upperOrbital: "5d", confirmed: false, refs: ["salhi"] },
-  { w: 4609.1,  family: "singlet", lowerOrbital: "4p", upperOrbital: "5s", confirmed: false, refs: ["salhi"] },
-  { w: 7424.2,  family: "singlet", lowerOrbital: "3s", upperOrbital: "3p", confirmed: false, refs: ["salhi"] },
-  { w: 294.6,   family: "triplet", lowerOrbital: "2s", upperOrbital: "5p", confirmed: false, refs: ["salhi"] },
-  { w: 318.9,   family: "triplet", lowerOrbital: "2s", upperOrbital: "4p", confirmed: true, refs: ["abramzon"] },
-  { w: 388.9,   family: "triplet", lowerOrbital: "2s", upperOrbital: "3p", confirmed: true, refs: ["koelemeij", "abramzon"] },
-  { w: 402.8,   family: "triplet", lowerOrbital: "2p", upperOrbital: "5d", confirmed: true, refs: ["abramzon"] },
-  { w: 412.2,   family: "triplet", lowerOrbital: "2p", upperOrbital: "5s", confirmed: true, refs: ["atoms2023"] },
-  { w: 447.3,   family: "triplet", lowerOrbital: "2p", upperOrbital: "4d", confirmed: true, refs: ["abramzon"] },
-  { w: 471.4,   family: "triplet", lowerOrbital: "2p", upperOrbital: "4s", confirmed: true, refs: ["atoms2023"] },
-  { w: 587.9,   family: "triplet", lowerOrbital: "2p", upperOrbital: "3d", confirmed: true, refs: ["abramzon"] },
-  { w: 706.9,   family: "triplet", lowerOrbital: "2p", upperOrbital: "3s", confirmed: true, refs: ["atoms2023"] },
-  { w: 946.4,   family: "triplet", lowerOrbital: "3s", upperOrbital: "5p", confirmed: false, refs: ["salhi"] },
-  { w: 1082.8,  family: "triplet", lowerOrbital: "2s", upperOrbital: "2p", confirmed: true, refs: ["cancio"] },
-  { w: 1197.9,  family: "triplet", lowerOrbital: "3p", upperOrbital: "5d", confirmed: false, refs: ["salhi"] },
-  { w: 1253.6,  family: "triplet", lowerOrbital: "3s", upperOrbital: "4p", confirmed: false, refs: ["salhi"] },
-  { w: 1284.8,  family: "triplet", lowerOrbital: "3p", upperOrbital: "5s", confirmed: false, refs: ["salhi"] },
-  { w: 1298.3,  family: "triplet", lowerOrbital: "3d", upperOrbital: "5p", confirmed: false, refs: ["salhi"] },
-  { w: 1700.7,  family: "triplet", lowerOrbital: "3p", upperOrbital: "4d", confirmed: false, refs: ["salhi"] },
-  { w: 1955.6,  family: "triplet", lowerOrbital: "3d", upperOrbital: "4p", confirmed: false, refs: ["salhi"] },
-  { w: 2112.2,  family: "triplet", lowerOrbital: "3p", upperOrbital: "4s", confirmed: false, refs: ["salhi"] },
-  { w: 2856.8,  family: "triplet", lowerOrbital: "4s", upperOrbital: "5p", confirmed: false, refs: ["salhi"] },
-  { w: 3701.0,  family: "triplet", lowerOrbital: "4p", upperOrbital: "5d", confirmed: false, refs: ["salhi"] },
-  { w: 4246.0,  family: "triplet", lowerOrbital: "4d", upperOrbital: "5p", confirmed: false, refs: ["salhi"] },
-  { w: 4290.1,  family: "triplet", lowerOrbital: "3s", upperOrbital: "3p", confirmed: false, refs: ["salhi"] },
-  { w: 4678.6,  family: "triplet", lowerOrbital: "4p", upperOrbital: "5s", confirmed: false, refs: ["salhi"] }
-].map(t => ({
-  w: t.w, family: t.family, lowerOrbital: t.lowerOrbital, upperOrbital: t.upperOrbital,
-  confirmed: t.confirmed, refs: t.refs,
-  visible: t.w >= WMIN && t.w <= WMAX,
-  nLow: parseInt(t.lowerOrbital,10), nHigh: parseInt(t.upperOrbital,10)
-}));
+  { calc: 361.5,  family: "singlet", lowerOrbital: "2s", upperOrbital: "5p", sources: [] },
+  { calc: 396.5,  family: "singlet", lowerOrbital: "2s", upperOrbital: "4p", sources: [] },
+  { calc: 439.0,  family: "singlet", lowerOrbital: "2p", upperOrbital: "5d", sources: [{ ref: "abramzon", nm: "438.8" }] },
+  { calc: 443.9,  family: "singlet", lowerOrbital: "2p", upperOrbital: "5s", sources: [] },
+  { calc: 492.4,  family: "singlet", lowerOrbital: "2p", upperOrbital: "4d", sources: [{ ref: "lin", nm: "492.193" }, { ref: "abramzon", nm: "492.2" }] },
+  { calc: 501.6,  family: "singlet", lowerOrbital: "2s", upperOrbital: "3p", sources: [{ ref: "lin", nm: "501.568" }] },
+  { calc: 505.0,  family: "singlet", lowerOrbital: "2p", upperOrbital: "4s", sources: [] },
+  { calc: 668.0,  family: "singlet", lowerOrbital: "2p", upperOrbital: "3d", sources: [{ ref: "lin", nm: "667.815" }, { ref: "abramzon", nm: "667.8" }] },
+  { calc: 728.5,  family: "singlet", lowerOrbital: "2p", upperOrbital: "3s", sources: [{ ref: "lin", nm: "728.135" }] },
+  { calc: 1102.1, family: "singlet", lowerOrbital: "3s", upperOrbital: "5p", sources: [] },
+  { calc: 1276.9, family: "singlet", lowerOrbital: "3d", upperOrbital: "5p", sources: [] },
+  { calc: 1298.3, family: "singlet", lowerOrbital: "3p", upperOrbital: "5d", sources: [] },
+  { calc: 1341.8, family: "singlet", lowerOrbital: "3p", upperOrbital: "5s", sources: [] },
+  { calc: 1508.3, family: "singlet", lowerOrbital: "3s", upperOrbital: "4p", sources: [] },
+  { calc: 1856.0, family: "singlet", lowerOrbital: "3d", upperOrbital: "4p", sources: [] },
+  { calc: 1910.4, family: "singlet", lowerOrbital: "3p", upperOrbital: "4d", sources: [] },
+  { calc: 2056.1, family: "singlet", lowerOrbital: "2s", upperOrbital: "2p", sources: [{ ref: "luo", nm: null }] },
+  { calc: 2115.8, family: "singlet", lowerOrbital: "3p", upperOrbital: "4s", sources: [] },
+  { calc: 3332.9, family: "singlet", lowerOrbital: "4s", upperOrbital: "5p", sources: [] },
+  { calc: 4012.4, family: "singlet", lowerOrbital: "4d", upperOrbital: "5p", sources: [] },
+  { calc: 4132.8, family: "singlet", lowerOrbital: "4p", upperOrbital: "5d", sources: [] },
+  { calc: 4609.1, family: "singlet", lowerOrbital: "4p", upperOrbital: "5s", sources: [] },
+  { calc: 7424.2, family: "singlet", lowerOrbital: "3s", upperOrbital: "3p", sources: [] },
+  { calc: 294.6,  family: "triplet", lowerOrbital: "2s", upperOrbital: "5p", sources: [] },
+  { calc: 318.9,  family: "triplet", lowerOrbital: "2s", upperOrbital: "4p", sources: [] },
+  { calc: 388.9,  family: "triplet", lowerOrbital: "2s", upperOrbital: "3p", sources: [{ ref: "lin", nm: "388.864" }, { ref: "koelemeij", nm: "389" }] },
+  { calc: 402.8,  family: "triplet", lowerOrbital: "2p", upperOrbital: "5d", sources: [{ ref: "abramzon", nm: "402.6" }] },
+  { calc: 412.2,  family: "triplet", lowerOrbital: "2p", upperOrbital: "5s", sources: [] },
+  { calc: 447.3,  family: "triplet", lowerOrbital: "2p", upperOrbital: "4d", sources: [{ ref: "lin", nm: "447.150" }, { ref: "abramzon", nm: "447.1" }] },
+  { calc: 471.4,  family: "triplet", lowerOrbital: "2p", upperOrbital: "4s", sources: [] },
+  { calc: 587.9,  family: "triplet", lowerOrbital: "2p", upperOrbital: "3d", sources: [{ ref: "lin", nm: "587.566" }, { ref: "abramzon", nm: "587.6" }] },
+  { calc: 706.9,  family: "triplet", lowerOrbital: "2p", upperOrbital: "3s", sources: [{ ref: "lin", nm: "706.525" }] },
+  { calc: 946.4,  family: "triplet", lowerOrbital: "3s", upperOrbital: "5p", sources: [] },
+  { calc: 1082.8, family: "triplet", lowerOrbital: "2s", upperOrbital: "2p", sources: [{ ref: "cancio", nm: null }] },
+  { calc: 1197.9, family: "triplet", lowerOrbital: "3p", upperOrbital: "5d", sources: [] },
+  { calc: 1253.6, family: "triplet", lowerOrbital: "3s", upperOrbital: "4p", sources: [] },
+  { calc: 1284.8, family: "triplet", lowerOrbital: "3p", upperOrbital: "5s", sources: [] },
+  { calc: 1298.3, family: "triplet", lowerOrbital: "3d", upperOrbital: "5p", sources: [] },
+  { calc: 1700.7, family: "triplet", lowerOrbital: "3p", upperOrbital: "4d", sources: [] },
+  { calc: 1955.6, family: "triplet", lowerOrbital: "3d", upperOrbital: "4p", sources: [] },
+  { calc: 2112.2, family: "triplet", lowerOrbital: "3p", upperOrbital: "4s", sources: [] },
+  { calc: 2856.8, family: "triplet", lowerOrbital: "4s", upperOrbital: "5p", sources: [] },
+  { calc: 3701.0, family: "triplet", lowerOrbital: "4p", upperOrbital: "5d", sources: [] },
+  { calc: 4246.0, family: "triplet", lowerOrbital: "4d", upperOrbital: "5p", sources: [] },
+  { calc: 4290.1, family: "triplet", lowerOrbital: "3s", upperOrbital: "3p", sources: [] },
+  { calc: 4678.6, family: "triplet", lowerOrbital: "4p", upperOrbital: "5s", sources: [] }
+].map(t => {
+  // Prefer the wavelength printed by the first source that gives one (most precise first);
+  // otherwise fall back to this app's calculated value, and remember which it is so the UI can
+  // label it ("measured" vs "calculated"/"predicted").
+  const measured = t.sources.find(s => s.nm !== null && /^\d+\.\d+$/.test(s.nm));
+  const w = measured ? parseFloat(measured.nm) : t.calc;
+  return {
+    w, calc: t.calc, wIsMeasured: !!measured,
+    family: t.family, lowerOrbital: t.lowerOrbital, upperOrbital: t.upperOrbital,
+    sources: t.sources,
+    predicted: t.sources.length === 0,
+    visible: w >= WMIN && w <= WMAX,
+    nLow: parseInt(t.lowerOrbital,10), nHigh: parseInt(t.upperOrbital,10)
+  };
+});
+// Wavelength text for display: measured values as printed (to 0.1nm); calculated ones with "≈".
+function formatTransitionNm(t){
+  return (t.wIsMeasured ? "" : "\u2248") + t.w.toFixed(1) + " nm";
+}
 
 // Real energy, in eV relative to the ionization limit (0 eV = electron just barely removed;
 // all bound levels are negative -- the standard convention, e.g. hydrogen's ground state sits
@@ -559,17 +544,11 @@ const HELIUM_TRANSITIONS = [
 // "Energy levels" diagram place 2s, 2p, 3s, 3p, 3d etc. at their true relative heights instead
 // of just ranking them by n.
 //
-// These are averaged (over J fine-structure sublevels, splittings of 1e-4 to 1e-2 eV -- far too
-// small to matter here) directly from Table 1 of Salhi & Jelassi, "Energy Levels and Lifetimes
-// of 1s2 and 1snl (n=2-5) for Neutral Helium," Orient. J. Phys. Sciences 2(2), 52-56 (2017),
-// specifically its NIST-sourced column (the paper's own subject is comparing a new calculation
-// against NIST, not the calculation itself -- the NIST column is what's used here). This single
-// source covers the complete n=2-5, l=0-2 (s/p/d) level set for both spin systems, replacing an
-// earlier version of this table that had to derive most of these values one anchor-transition at
-// a time. Reassuringly, every value that overlaps with that earlier derivation agrees to within
-// 0.002eV, and the earlier singlet 2s/3p values derived from this same NIST ground-state
-// excitation tool (2^1P=21.2180eV, 3^1P=23.0870eV, ionization energy 24.5874eV) match this
-// table exactly, as they should since the paper cites the same original NIST holdings.
+// Values are from the NIST Atomic Spectra Database (He I levels; ionization limit 24.5874eV),
+// rounded to 0.001eV and averaged over J fine-structure sublevels (splittings of 1e-4 to 1e-2
+// eV). They were originally transcribed from the NIST column of Table 1 in Salhi & Jelassi,
+// Orient. J. Phys. Sci. 2(2), 52-56 (2017), and were re-checked directly against NIST ASD in the
+// Nov 2026 citation audit (every value agrees to within 0.0005eV). NIST is cited in the UI.
 const HELIUM_LEVEL_ENERGY_EV = {
   singlet: { "2s": -3.972, "2p": -3.369, "3s": -1.667, "3p": -1.500, "3d": -1.513, "4s": -0.914, "4p": -0.845, "4d": -0.851, "5s": -0.576, "5p": -0.542, "5d": -0.545 },
   triplet: { "2s": -4.768, "2p": -3.623, "3s": -1.869, "3p": -1.580, "3d": -1.514, "4s": -0.993, "4p": -0.880, "4d": -0.851, "5s": -0.615, "5p": -0.559, "5d": -0.545 }
@@ -579,8 +558,13 @@ const HELIUM_LEVEL_ENERGY_EV = {
 // so can't show its real colour on the spectrum card -- brown for the infrared side, a pale
 // violet for the ultraviolet side, matching how these regions are conventionally suggested in
 // diagrams (there's no "real" colour to show; human eyes can't see either). Both branches are
-// genuinely used: 294.6/318.9/361.5nm (triplet/triplet/singlet, all 2s<->5p or 2s<->4p) are real
-// near-UV transitions confirmed against Abramzon & Siegel's measured line table.
+// genuinely used: 294.6/318.9/361.5nm (2s<->np, n=4,5) are near-UV lines (predicted values).
+// The spectrum card only draws 380-700nm, but human vision reaches to roughly 750nm (dim, deep
+// red). So "not on the card" is NOT the same as "invisible": 706.5nm and 728.1nm are real,
+// visible deep-red lines that simply fall past the card's right edge. EYE_MAX is used to tell
+// the two cases apart in labels and colours; only lines beyond it are called infrared.
+const EYE_MAX = 750;
+function lightBand(w){ return w < WMIN ? "uv" : (w > EYE_MAX ? "ir" : "visible"); }
 function offVisibleColor(w){
   return w > WMAX ? "rgb(150,102,63)" : "rgb(200,175,222)";
 }
@@ -1419,9 +1403,10 @@ function buildEnergyLevelSVG(transitions, selectedIndex, cfg){
   // Each transition gets its own x slot within its family's band, ordered left-to-right by
   // increasing wavelength (i.e. decreasing photon energy) -- so the highest-energy line in a
   // family is always leftmost, and no two transitions can ever share an x position. Transitions
-  // outside the visible window (t.visible === false) are drawn dashed, in a colour signalling
-  // which side of the visible spectrum they're on (see offVisibleColor), since there's no real
-  // colour to show for light nobody can see.
+  // in the ultraviolet or infrared (see lightBand) are drawn dashed, in a colour signalling which
+  // side of the visible spectrum they're on (see offVisibleColor), since there's no real colour
+  // to show for light nobody can see. Deep-red lines past the card's 700nm edge are still
+  // visible light, so they keep their real colour and a solid line.
   cfg.families.forEach(fam=>{
     const indices = transitions.map((t,i)=>({t,i})).filter(o=>cfg.getFamily(o.t)===fam);
     indices.sort((a,b)=>a.t.w-b.t.w);
@@ -1431,7 +1416,7 @@ function buildEnergyLevelSVG(transitions, selectedIndex, cfg){
       const x = x0 + (slot+0.5) * (x1-x0)/n;
       const { t, i } = o;
       const yTop = yByFamily[fam][cfg.getUpperKey(t)], yBottom = yByFamily[fam][cfg.getLowerKey(t)];
-      const isOffVisible = t.visible === false;
+      const isOffVisible = lightBand(t.w) !== "visible";   // UV/IR only; off-card deep red keeps its real colour
       const color = isOffVisible ? offVisibleColor(t.w) : wavelengthToRGB(t.w);
       const isSelected = selectedIndex === i;
       const dash = isOffVisible ? ` stroke-dasharray="5 3"` : "";
@@ -1488,7 +1473,7 @@ function buildInspectCard(transitions){
     const bar = el("div","spec-line inspect-line" + (selected ? " selected" : ""));
     bar.style.left = pct(t.w)+"%";
     bar.style.background = wavelengthToRGB(t.w);
-    bar.title = `${t.w.toFixed(1)} nm (n=${t.nHigh} \u2192 n=${t.nLow}) \u2014 click to inspect`;
+    bar.title = `${t.wIsMeasured ? "" : "\u2248"}${t.w.toFixed(1)} nm (n=${t.nHigh} \u2192 n=${t.nLow})${t.predicted ? " \u00b7 predicted" : ""} \u2014 click to inspect`;
     bar.onclick = ()=>{ state.inspectSelectedIndex = i; renderAll(); };
     refLayer.appendChild(bar);
   });
@@ -1599,9 +1584,9 @@ function renderInspect(main, side){
 
     let explanation;
     if (isHydrogen){
-      explanation = `An electron drops from <b>n=${t.nHigh}</b> to <b>n=${t.nLow}</b>, emitting a photon at <b>${t.w.toFixed(1)} nm</b>.`;
+      explanation = `An electron drops from <b>n=${t.nHigh}</b> to <b>n=${t.nLow}</b>, emitting a photon at <b>\u2248${t.w.toFixed(1)} nm</b> (calculated with the Rydberg formula, not measured).`;
       const energyEv = 13.6 * (1/(t.nLow*t.nLow) - 1/(t.nHigh*t.nHigh));
-      explanation += ` That's a photon energy of <b>${energyEv.toFixed(2)} eV</b> \u2014 exactly 13.6&nbsp;eV &times; (1/${t.nLow}\u00b2 &minus; 1/${t.nHigh}\u00b2).`;
+      explanation += ` That's a photon energy of about <b>${energyEv.toFixed(2)} eV</b> \u2014 13.6&nbsp;eV &times; (1/${t.nLow}\u00b2 &minus; 1/${t.nHigh}\u00b2), using the Bohr model's 13.6&nbsp;eV.`;
       if (showGrotrian){
         const eUp = energyCfg.getLevelEnergy("H", t.nHigh), eLow = energyCfg.getLevelEnergy("H", t.nLow);
         explanation += ` On the diagram: n=${t.nHigh} sits at <b>${eUp.toFixed(2)} eV</b>, n=${t.nLow} at <b>${eLow.toFixed(2)} eV</b> (both relative to the ionization limit at 0 eV).`;
@@ -1615,21 +1600,30 @@ function renderInspect(main, side){
       explanation += ` This single line is actually three degenerate transitions at once -- <b>${t.nHigh}s\u21922p</b>, <b>${t.nHigh}p\u21922s</b> and <b>${t.nHigh}d\u21922p</b> -- indistinguishable here because hydrogen's energy depends only on n, never on the orbital's shape.`;
     } else {
       const eUp = HELIUM_LEVEL_ENERGY_EV[t.family][t.upperOrbital], eLow = HELIUM_LEVEL_ENERGY_EV[t.family][t.lowerOrbital];
-      explanation = `An electron drops from <b>${t.upperOrbital}</b> (<b>${eUp.toFixed(2)} eV</b>) to <b>${t.lowerOrbital}</b> (<b>${eLow.toFixed(2)} eV</b>) within the <b>${t.family}</b> family, emitting a photon at <b>${t.w.toFixed(1)} nm</b>.`;
+      explanation = `An electron drops from <b>${t.upperOrbital}</b> (<b>${eUp.toFixed(2)} eV</b>) to <b>${t.lowerOrbital}</b> (<b>${eLow.toFixed(2)} eV</b>) within the <b>${t.family}</b> family, emitting a photon at <b>${formatTransitionNm(t)}</b>`;
+      if (t.wIsMeasured) explanation += ` (measured).`;
+      else if (t.predicted) explanation += ` (<b>predicted</b>).`;
+      else explanation += ` (calculated from the energy levels).`;
       if (t.visible === false){
-        const side2 = t.w > WMAX ? "infrared" : "ultraviolet";
-        explanation += ` That's ${t.w > WMAX ? "beyond red" : "beyond violet"} \u2014 in the near-${side2}, invisible to the eye, so it can't be shown on the spectrum card above.`;
+        const band = lightBand(t.w);
+        if (band === "visible"){
+          explanation += ` That's deep red light near the edge of human vision \u2014 visible, but past the 700&nbsp;nm right-hand edge of the spectrum card above, so it isn't drawn there.`;
+        } else {
+          const side2 = band === "ir" ? "infrared" : "ultraviolet";
+          explanation += ` That's ${band === "ir" ? "beyond red" : "beyond violet"} \u2014 in the near-${side2}, invisible to the eye, so it can't be shown on the spectrum card above.`;
+        }
       }
-      if (t.confirmed === false){
-        const salhi = HELIUM_REFERENCES.salhi;
-        explanation += ` This wavelength is <b>predicted</b> from this diagram's own derived energy levels, not an independently published measurement (levels sourced from <a href="${salhi.url}" target="_blank" rel="noopener">${salhi.name}</a>).`;
-      } else if (t.refs && t.refs.length){
-        const links = t.refs.map(key => {
-          const ref = HELIUM_REFERENCES[key];
-          return `<a href="${ref.url}" target="_blank" rel="noopener">${ref.name}</a>`;
-        }).join(", ");
-        explanation += ` Source: ${links}.`;
+      const refLink = key => { const r = HELIUM_REFERENCES[key]; return `<a href="${r.url}" target="_blank" rel="noopener">${r.name}</a>`; };
+      if (t.predicted){
+        explanation += ` <b>Prediction:</b> this wavelength is calculated from the energy levels shown, and we have not found a published measurement that identifies this transition \u2014 treat it as an estimate.`;
+      } else {
+        const cites = t.sources.map(s => refLink(s.ref) + (s.nm && /^\d+\.\d+$/.test(s.nm) ? ` (${s.nm} nm)` : "")).join("; ");
+        explanation += ` This transition is identified in: ${cites}.`;
+        if (t.wIsMeasured){
+          explanation += ` (The energy levels shown, rounded, give \u2248${t.calc.toFixed(1)} nm.)`;
+        }
       }
+      explanation += ` Energy levels: ${refLink("nist")}, rounded.`;
       // The nice payoff of showing real numbers: helium's d-levels turn out to sit almost
       // exactly where hydrogen's same-n level does (compare with the Hydrogen tab), because a
       // d orbital barely dips into the nucleus-shielding 1s core and ends up nearly hydrogenic.
@@ -1659,9 +1653,10 @@ function renderInspect(main, side){
     const row = el("div","test-row" + (selected ? " selected" : ""));
     row.style.cursor = "pointer";
     const label = isHydrogen ? `n=${t.nHigh} \u2192 n=${t.nLow}` : `${t.upperOrbital} \u2192 ${t.lowerOrbital}`;
-    const rangeTag = t.visible === false ? (t.w > WMAX ? " (IR)" : " (UV)") : "";
-    const dashTag = t.confirmed === false ? " \u00b7 predicted" : "";
-    row.innerHTML = `<span>${label}${rangeTag}${dashTag}</span><span class="stat">${t.w.toFixed(1)} nm</span>`;
+    const band = lightBand(t.w);
+    const rangeTag = band === "ir" ? " (IR)" : band === "uv" ? " (UV)" : (t.visible === false ? " (deep red, off card)" : "");
+    const dashTag = t.predicted ? " \u00b7 predicted" : "";
+    row.innerHTML = `<span>${label}${rangeTag}${dashTag}</span><span class="stat">${t.predicted !== undefined ? formatTransitionNm(t) : "\u2248" + t.w.toFixed(1) + " nm"}</span>`;
     row.onclick = ()=>{ state.inspectSelectedIndex = i; renderAll(); };
     log.appendChild(row);
   });
