@@ -929,10 +929,10 @@ function renderAll(){
 function renderExplore(main, side){
   const p = el("div","panel");
   p.appendChild(el("h2",null,"Investigating atomic spectra"));
-  p.appendChild(el("p","sub","Every element has a unique set of frequencies it can emit light at, which we see as the colours in its spectrum. By measuring atomic spectra, we can identify exactly which elements are present."));
+  p.appendChild(el("p","sub","Different elements respond to and emit light at different frequencies, which we call their <b>spectrum</b> and see as a unique series of colours.. By measuring the colours emitted by a hot gas sample, we can identify exactly which elements are present."));
 
   const intro = el("div","intro-box");
-  intro.innerHTML = `<p><b>How it works:</b> Select an atomic spectrum (or a mixture) to view and a mask to view it with. The masks will only let through the colours for that particular atom. What do you see when the mask matches the element being studied?</p>`;
+  intro.innerHTML = `<p><b>How it works:</b> Select a <b>reference card</b>, which shows the colours from the sample, and a <b>mask</b>, which only lets through the colours corresponding to that element. What do you see when the mask and reference match?</p>`;
   p.appendChild(intro);
 
   // The single reference card, built from whatever refMode/refElement/customElements currently
@@ -1150,7 +1150,7 @@ function renderLabGas(main, side){
 function renderClone(main, side){
   const p = el("div","panel");
   p.appendChild(el("h2",null,"Bonus: Find the hidden message"));
-  p.appendChild(el("p","sub","The mixture contains three elements. Determine what they are to reveal a hidden word, perhaps about something the lab was trying to do to their quantum states."));
+  p.appendChild(el("p","sub","The mixture contains three elements. Determine what they are to reveal a hidden word, corresponding to something that can't be done to quantum states."));
 
   // Build the card and resolve this render's mask test FIRST, so the blanks row (built next)
   // reflects the just-tested result immediately rather than one render behind. (Earlier version
@@ -1514,8 +1514,8 @@ function renderInspect(main, side){
   const isHydrogen = state.inspectElement === "H";
   const note = el("div","intro-box");
   note.innerHTML = isHydrogen
-    ? `<p><b>Exact:</b> hydrogen has just one electron, so its energy levels follow the Bohr model's formula exactly -- every line below is calculated directly from it, not looked up.</p>`
-    : `<p><b>Illustrative:</b> helium has two electrons, and there's no exact Bohr-style solution for multi-electron atoms. The shell numbers (n) below are real, published values, but the neat circular-orbit picture itself is a simplification -- it can't show the extra splitting real helium has.</p>`;
+    ? `<p><b>Hydrogen</b> has just one electron, so its energy levels follow the Bohr model exactly.</p>`
+    : `<p><b>Helium</b> has two electrons, and there's no exact Bohr-style solution for multi-electron atoms. The circular diagram is a simplification.</p>`;
   p.appendChild(note);
 
   // Both elements can switch between the (simplified, equally-spaced) Bohr-orbit cartoon and
@@ -1540,7 +1540,7 @@ function renderInspect(main, side){
     p.appendChild(famNote);
   } else if (showGrotrian){
     const famNote = el("div","intro-box");
-    famNote.innerHTML = `<p>These levels are now spaced by their real energy rather than just ranked by n -- notice how they crowd closer together at higher n, approaching the ionization limit, exactly as the -13.6/n\u00b2 formula predicts.</p>`;
+    famNote.innerHTML = `<p>The energy levels spacing is given by -13.6/n\u00b2.</p>`;
     p.appendChild(famNote);
   }
 
