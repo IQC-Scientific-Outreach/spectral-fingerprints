@@ -277,7 +277,7 @@
   .reveal-box b{ color: var(--crimson-dark); }
 
   footer.credits{
-    margin-top: 26px; font-size: 11.5px; color: var(--ink-soft); text-align:center;
+    margin-top: 26px; font-size: 11.5px; color: var(--ink-soft); text-align:left;
   }
 </style>
 </head>
@@ -302,7 +302,7 @@
     <div id="side-col"></div>
   </div>
 
-  <footer class="credits">Simulator for the <i>Spectral Fingerprints</i> activity in <a href="https://uwaterloo.ca/institute-for-quantum-computing/outreach/quantum-educators/teacher-resources" target="_blank" rel="noopener">Quantum Detectives</a><br>Published by the Scientific Outreach Team at the <a href="https://uwaterloo.ca/iqc" target="_blank" rel="noopener">Institute for Quantum Computing</a>, University of Waterloo<br>Emission wavelengths from the <a href="https://physics.nist.gov/PhysRefData/ASD/lines_form.html" target="_blank" rel="noopener">NIST Atomic Spectra Database</a>. Inspection mode: hydrogen lines calculated from the Rydberg formula; helium energy levels from the <a href="https://physics.nist.gov/PhysRefData/ASD/levels_form.html" target="_blank" rel="noopener">NIST Atomic Spectra Database</a>; measured helium line assignments from <a href="https://doi.org/10.3390/atoms11060094" target="_blank" rel="noopener">Lin, Goto &amp; Akatsuka (2023)</a> and <a href="https://doi.org/10.1119/1.3086029" target="_blank" rel="noopener">Abramzon &amp; Siegel (2009)</a>; all other helium lines are predictions.</footer>
+  <footer class="credits">Simulator for the <i>Spectral Fingerprints</i> activity in <a href="https://uwaterloo.ca/institute-for-quantum-computing/outreach/quantum-educators/teacher-resources" target="_blank" rel="noopener">Quantum Detectives</a>. Published by the Scientific Outreach Team at the <a href="https://uwaterloo.ca/iqc" target="_blank" rel="noopener">Institute for Quantum Computing</a>, University of Waterloo. Emission wavelengths from the <a href="https://physics.nist.gov/PhysRefData/ASD/lines_form.html" target="_blank" rel="noopener">NIST Atomic Spectra Database</a>. <span id="credits-inspection">Inspection mode: hydrogen lines calculated from the Rydberg formula<span id="credits-helium">; helium energy levels from the <a href="https://physics.nist.gov/PhysRefData/ASD/levels_form.html" target="_blank" rel="noopener">NIST Atomic Spectra Database</a>; measured helium line assignments from <a href="https://doi.org/10.3390/atoms11060094" target="_blank" rel="noopener">Lin, Goto &amp; Akatsuka (2023)</a> and <a href="https://doi.org/10.1119/1.3086029" target="_blank" rel="noopener">Abramzon &amp; Siegel (2009)</a>; all other helium lines are predictions</span>.</span></footer>
 </div>
 
 <script>
@@ -1534,7 +1534,7 @@ function renderInspect(main, side){
   const isHydrogen = state.inspectElement === "H";
   const note = el("div","intro-box");
   note.innerHTML = isHydrogen
-    ? `<p><b>Hydrogen</b> has just one electron, so its energy levels follow the Bohr model exactly.</p>`
+    ? `<p><b>Hydrogen</b> has just one electron, so its energy levels follow the Bohr model exactly. The energy level spacing is given by -13.6/n\u00b2.</p>`
     : `<p><b>Helium</b> has two electrons, and there's no exact Bohr-style solution for multi-electron atoms. The circular diagram is a simplification.</p>`;
   p.appendChild(note);
 
@@ -1543,11 +1543,11 @@ function renderInspect(main, side){
   // a line is clicked, when they show just the shells/levels with nothing highlighted. For
   // helium, the energy-level view is the real reason the Bohr cartoon needs its caveat above:
   // singlet and triplet behave like two nearly-independent ladders, each with its own spacing.
-  const famNote = el("div","intro-box");
-  famNote.innerHTML = isHydrogen
-    ? `<p>The energy level spacing is given by -13.6/n\u00b2.</p>`
-    : `<p>Helium's two electrons can pair with opposite spins (<b>singlet</b>, "parahelium") or matching spins (<b>triplet</b>, "orthohelium"). These two families almost never exchange energy with each other, so -- unlike hydrogen's single ladder of levels -- helium effectively behaves like two separate atoms here, each with its own ladder, now drawn to their real relative energies (not just ranked by n).</p>`;
-  p.appendChild(famNote);
+  if (!isHydrogen){
+    const famNote = el("div","intro-box");
+    famNote.innerHTML = `<p>Helium's two electrons can pair with opposite spins (<b>singlet</b>, "parahelium") or matching spins (<b>triplet</b>, "orthohelium"). These two families almost never exchange energy with each other, so -- unlike hydrogen's single ladder of levels -- helium effectively behaves like two separate atoms here, each with its own ladder, now drawn to their real relative energies (not just ranked by n).</p>`;
+    p.appendChild(famNote);
+  }
 
   const transitions = isHydrogen ? HYDROGEN_BALMER : HELIUM_TRANSITIONS;
   const maxN = Math.max(...transitions.map(t=>t.nHigh));
@@ -1674,7 +1674,14 @@ function renderInspect(main, side){
 // Pull Inspection out of the tab bar entirely when the feature flag above is off, and make sure
 // a stray state.mode of "inspect" (e.g. left over from testing) can't get through the render
 // dispatcher above -- both checks fail closed, defaulting back to Explore.
+// Footer credits for switched-off features are removed too, so nothing mentions them.
+if (!ENABLE_INSPECTION_HELIUM){
+  const heCredits = document.getElementById("credits-helium");
+  if (heCredits) heCredits.remove();
+}
 if (!ENABLE_INSPECTION){
+  const inspCredits = document.getElementById("credits-inspection");
+  if (inspCredits) inspCredits.remove();
   const inspectBtn = document.querySelector('#mode-switch button[data-mode="inspect"]');
   if (inspectBtn) inspectBtn.remove();
   if (state.mode === "inspect") state.mode = "explore";
