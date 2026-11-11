@@ -190,6 +190,16 @@
     background: #fbfaf6; border: 1px solid var(--line); border-radius: var(--radius);
     padding: 8px; margin: 4px 0 12px;
   }
+  .inspect-diagrams{
+    display:flex; flex-wrap:wrap; gap:12px; margin: 4px 0 12px;
+  }
+  .inspect-diagrams .bohr-diagram{
+    flex: 1 1 280px; min-width:0; margin:0; flex-direction:column;
+  }
+  .diagram-title{
+    font: 600 11.5px var(--sans); letter-spacing:.06em; text-transform:uppercase;
+    color: var(--ink-soft); margin: 2px 0 4px; align-self:flex-start;
+  }
   .grotrian-line{ cursor:pointer; transition: opacity .1s; }
   .grotrian-line:hover{ opacity:1 !important; filter: brightness(1.2); }
 
@@ -631,7 +641,7 @@ const state = {
   // --- Inspection mode ---
   inspectElement: "H",        // "H" | "He" -- which element's transitions are shown
   inspectSelectedIndex: null, // index into HYDROGEN_BALMER/HELIUM_TRANSITIONS, or null = nothing clicked yet
-  inspectViewMode: "grotrian"  // "bohr" | "grotrian" -- default to real energy levels for both elements
+  // (Bohr model and energy-level diagrams are always shown together, so there is no view toggle.)
 };
 
 /* ===================== reference line set builder ===================== */
@@ -1235,15 +1245,26 @@ function renderClone(main, side){
 // not the electron. Orbit spacing is linear (equal gaps) rather than the physically-accurate
 // n^2 spacing, which would make a n=6 ring 36x the radius of n=1 -- exactly the same
 // simplification used in the printed activity's own title-page Bohr icon, just with more shells.
+// Pass nLow/nHigh as null (nothing selected, or a same-n jump the circles can't show) to draw
+// just the shells and nucleus, with no arrow.
 function buildBohrDiagramSVG({nLow, nHigh, color, maxN}){
   const size = 360, cx = size/2, cy = 195; // cy offset below centre to leave headroom for the outer label
   const baseR = 22, ringGap = 24;
-  const topN = Math.max(maxN, nHigh);
+  const hasJump = nLow != null && nHigh != null && nLow !== nHigh;
+  const topN = hasJump ? Math.max(maxN, nHigh) : maxN;
   let rings = "";
   for (let n=1; n<=topN; n++){
     const r = baseR + (n-1)*ringGap;
     rings += `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="#d8d2c4" stroke-width="1.5"/>`;
     rings += `<text x="${cx}" y="${cy-r-6}" font-size="12" text-anchor="middle" fill="#8a8478">n=${n}</text>`;
+  }
+  const nucleus = `<circle cx="${cx}" cy="${cy}" r="7" fill="#9c1c33"/>
+    <text x="${cx}" y="${cy+21}" font-size="10" text-anchor="middle" fill="#9c1c33">nucleus</text>`;
+  if (!hasJump){
+    return `<svg viewBox="0 0 ${size} ${size}" width="100%" height="280" role="img" aria-label="Bohr model electron shells">
+    ${rings}
+    ${nucleus}
+  </svg>`;
   }
   const rHigh = baseR + (nHigh-1)*ringGap;
   const rLow = baseR + (nLow-1)*ringGap;
@@ -1267,8 +1288,7 @@ function buildBohrDiagramSVG({nLow, nHigh, color, maxN}){
       </marker>
     </defs>
     ${rings}
-    <circle cx="${cx}" cy="${cy}" r="7" fill="#9c1c33"/>
-    <text x="${cx}" y="${cy+21}" font-size="10" text-anchor="middle" fill="#9c1c33">nucleus</text>
+    ${nucleus}
     <path d="M ${x1} ${y1} Q ${xm} ${ym} ${x2} ${y2}" fill="none" stroke="${color}" stroke-width="2.5" marker-end="url(#bohr-arrowhead)"/>
     <circle cx="${x1}" cy="${y1}" r="4.5" fill="#fff" stroke="#111" stroke-width="2"/>
     <circle cx="${x2}" cy="${y2}" r="5.5" fill="#111"/>
@@ -1505,7 +1525,7 @@ function renderInspect(main, side){
   inspectElements.forEach(k=>{
     const chip = el("div","chip" + (state.inspectElement===k?" active":""));
     chip.innerHTML = `<span class="dot" style="background:${ELEMENTS[k].swatch}"></span>${ELEMENTS[k].name}`;
-    chip.onclick = ()=>{ state.inspectElement = k; state.inspectSelectedIndex = null; state.inspectViewMode = "grotrian"; renderAll(); };
+    chip.onclick = ()=>{ state.inspectElement = k; state.inspectSelectedIndex = null; renderAll(); };
     toggleRow.appendChild(chip);
   });
   // A one-option picker is pointless, so only show it when there's actually a choice.
@@ -1518,31 +1538,16 @@ function renderInspect(main, side){
     : `<p><b>Helium</b> has two electrons, and there's no exact Bohr-style solution for multi-electron atoms. The circular diagram is a simplification.</p>`;
   p.appendChild(note);
 
-  // Both elements can switch between the (simplified, equally-spaced) Bohr-orbit cartoon and
-  // an "Energy levels" view drawn to TRUE relative energy (see buildEnergyLevelSVG). For
-  // hydrogen this mostly demonstrates that n alone really does determine energy -- s/p/d for
-  // the same n would all land on the same line, which is exactly why hydrogen doesn't need
-  // separate orbital tracking anywhere else in this app. For helium it's the real reason the
-  // Bohr cartoon needs its "illustrative" caveat above: singlet and triplet behave like two
-  // nearly-independent ladders, each with its own true spacing.
-  const viewRow = el("div","chip-grid");
-  [["bohr","Bohr model"],["grotrian","Energy levels"]].forEach(([v,label])=>{
-    const chip = el("div","chip" + (state.inspectViewMode===v?" active":""), label);
-    chip.onclick = ()=>{ state.inspectViewMode = v; renderAll(); };
-    viewRow.appendChild(chip);
-  });
-  p.appendChild(viewRow);
-
-  const showGrotrian = state.inspectViewMode === "grotrian";
-  if (showGrotrian && !isHydrogen){
-    const famNote = el("div","intro-box");
-    famNote.innerHTML = `<p>Helium's two electrons can pair with opposite spins (<b>singlet</b>, "parahelium") or matching spins (<b>triplet</b>, "orthohelium"). These two families almost never exchange energy with each other, so -- unlike hydrogen's single ladder of levels -- helium effectively behaves like two separate atoms here, each with its own ladder, now drawn to their real relative energies (not just ranked by n).</p>`;
-    p.appendChild(famNote);
-  } else if (showGrotrian){
-    const famNote = el("div","intro-box");
-    famNote.innerHTML = `<p>The energy level spacing is given by -13.6/n\u00b2.</p>`;
-    p.appendChild(famNote);
-  }
+  // The (simplified, equally-spaced) Bohr-orbit cartoon and the "Energy levels" view drawn to
+  // TRUE relative energy (see buildEnergyLevelSVG) are shown side by side, always -- even before
+  // a line is clicked, when they show just the shells/levels with nothing highlighted. For
+  // helium, the energy-level view is the real reason the Bohr cartoon needs its caveat above:
+  // singlet and triplet behave like two nearly-independent ladders, each with its own spacing.
+  const famNote = el("div","intro-box");
+  famNote.innerHTML = isHydrogen
+    ? `<p>The energy level spacing is given by -13.6/n\u00b2.</p>`
+    : `<p>Helium's two electrons can pair with opposite spins (<b>singlet</b>, "parahelium") or matching spins (<b>triplet</b>, "orthohelium"). These two families almost never exchange energy with each other, so -- unlike hydrogen's single ladder of levels -- helium effectively behaves like two separate atoms here, each with its own ladder, now drawn to their real relative energies (not just ranked by n).</p>`;
+  p.appendChild(famNote);
 
   const transitions = isHydrogen ? HYDROGEN_BALMER : HELIUM_TRANSITIONS;
   const maxN = Math.max(...transitions.map(t=>t.nHigh));
@@ -1550,54 +1555,55 @@ function renderInspect(main, side){
 
   p.appendChild(buildInspectCard(transitions));
 
-  if (state.inspectSelectedIndex === null || state.inspectSelectedIndex >= transitions.length){
+  const hasSelection = state.inspectSelectedIndex !== null && state.inspectSelectedIndex < transitions.length;
+  const t = hasSelection ? transitions[state.inspectSelectedIndex] : null;
+
+  // Both diagrams, side by side (stacking on narrow screens). With nothing selected, the Bohr
+  // model shows no arrow and the energy-level view has no line in bold.
+  const diagrams = el("div","inspect-diagrams");
+  const bohrBox = el("div","bohr-diagram");
+  bohrBox.appendChild(el("div","diagram-title","Bohr model"));
+  const bohrSvg = el("div");
+  bohrSvg.style.width = "100%";
+  // The Bohr cartoon only understands principal quantum number n -- it can't show a transition
+  // between two orbitals that SHARE an n (e.g. helium's 3p<->3s), since both sit on the same
+  // circle. For those it draws no arrow, and a note points to the energy-level view instead.
+  const sameN = !!t && t.nHigh === t.nLow;
+  bohrSvg.innerHTML = buildBohrDiagramSVG({
+    nLow: t && !sameN ? t.nLow : null,
+    nHigh: t && !sameN ? t.nHigh : null,
+    color: t ? wavelengthToRGB(t.w) : "#111",
+    maxN
+  });
+  bohrBox.appendChild(bohrSvg);
+  diagrams.appendChild(bohrBox);
+
+  const levelBox = el("div","bohr-diagram");
+  levelBox.appendChild(el("div","diagram-title","Energy levels"));
+  const levelSvg = el("div");
+  levelSvg.style.width = "100%";
+  levelSvg.innerHTML = buildEnergyLevelSVG(transitions, hasSelection ? state.inspectSelectedIndex : null, energyCfg);
+  // buildEnergyLevelSVG only returns markup -- attach click handlers now it's in the DOM.
+  levelSvg.querySelectorAll(".grotrian-line").forEach(lineEl=>{
+    const idx = parseInt(lineEl.dataset.idx, 10);
+    lineEl.onclick = ()=>{ state.inspectSelectedIndex = idx; renderAll(); };
+  });
+  levelBox.appendChild(levelSvg);
+  diagrams.appendChild(levelBox);
+  p.appendChild(diagrams);
+
+  if (!hasSelection){
     p.appendChild(el("div","feedback neutral","Click a line above to see its transition."));
   } else {
-    const t = transitions[state.inspectSelectedIndex];
-    const color = wavelengthToRGB(t.w);
-    const diagram = el("div","bohr-diagram");
-    // The Bohr cartoon only understands principal quantum number n -- it can't show a
-    // transition between two orbitals that happen to SHARE an n (e.g. helium's 3p<->3s), since
-    // both would sit on the identical circle with no jump to animate. Fall back to the energy-
-    // level view for exactly those cases, regardless of which toggle is selected.
-    const sameN = t.nHigh === t.nLow;
-    const effectiveShowGrotrian = showGrotrian || sameN;
-    if (effectiveShowGrotrian){
-      diagram.innerHTML = buildEnergyLevelSVG(transitions, state.inspectSelectedIndex, energyCfg);
-      p.appendChild(diagram);
-      // buildEnergyLevelSVG only returns markup (consistent with how buildInspectCard's lines
-      // are wired up) -- attach click handlers now that the SVG is actually in the DOM.
-      diagram.querySelectorAll(".grotrian-line").forEach(lineEl=>{
-        const idx = parseInt(lineEl.dataset.idx, 10);
-        lineEl.onclick = ()=>{ state.inspectSelectedIndex = idx; renderAll(); };
-      });
-      if (sameN && !showGrotrian){
-        const fallbackNote = el("div","feedback neutral");
-        fallbackNote.style.marginBottom = "8px";
-        fallbackNote.textContent = `Both levels here share n=${t.nHigh}, so the Bohr model's circular orbits can't show this jump \u2014 showing energy levels instead.`;
-        p.insertBefore(fallbackNote, diagram);
-      }
-    } else {
-      diagram.innerHTML = buildBohrDiagramSVG({ nLow: t.nLow, nHigh: t.nHigh, color, maxN });
-      p.appendChild(diagram);
+    if (sameN){
+      const sameNNote = el("div","feedback neutral");
+      sameNNote.textContent = `Both levels here share n=${t.nHigh}, so the Bohr model's circular orbits can't show this jump \u2014 see the energy levels instead.`;
+      p.appendChild(sameNNote);
     }
 
     let explanation;
     if (isHydrogen){
-      explanation = `An electron drops from <b>n=${t.nHigh}</b> to <b>n=${t.nLow}</b>, emitting a photon at <b>\u2248${t.w.toFixed(1)} nm</b> (calculated with the Rydberg formula, not measured).`;
-      const energyEv = 13.6 * (1/(t.nLow*t.nLow) - 1/(t.nHigh*t.nHigh));
-      explanation += ` That's a photon energy of about <b>${energyEv.toFixed(2)} eV</b> \u2014 13.6&nbsp;eV &times; (1/${t.nLow}\u00b2 &minus; 1/${t.nHigh}\u00b2), using the Bohr model's 13.6&nbsp;eV.`;
-      if (showGrotrian){
-        const eUp = energyCfg.getLevelEnergy("H", t.nHigh), eLow = energyCfg.getLevelEnergy("H", t.nLow);
-        explanation += ` On the diagram: n=${t.nHigh} sits at <b>${eUp.toFixed(2)} eV</b>, n=${t.nLow} at <b>${eLow.toFixed(2)} eV</b> (both relative to the ionization limit at 0 eV).`;
-      }
-      // Direct comparison with helium's per-line orbital labels below: a single hydrogen line
-      // is actually several DEGENERATE transitions at once. Only ns->2p, np->2s and nd->2p are
-      // dipole-allowed (higher-l states like nf can't jump straight to n=2), and all three have
-      // exactly the same energy here because -- unlike helium -- hydrogen's energy depends only
-      // on n, never on the orbital's shape. That degeneracy is precisely why the simple n-only
-      // Bohr picture is exact for hydrogen and not for helium.
-      explanation += ` This single line is actually three degenerate transitions at once -- <b>${t.nHigh}s\u21922p</b>, <b>${t.nHigh}p\u21922s</b> and <b>${t.nHigh}d\u21922p</b> -- indistinguishable here because hydrogen's energy depends only on n, never on the orbital's shape.`;
+      explanation = `An electron drops from <b>n=${t.nHigh}</b> to <b>n=${t.nLow}</b>, emitting a photon at <b>\u2248${t.w.toFixed(1)} nm</b> (calculated with the Rydberg formula).`;
     } else {
       const eUp = HELIUM_LEVEL_ENERGY_EV[t.family][t.upperOrbital], eLow = HELIUM_LEVEL_ENERGY_EV[t.family][t.lowerOrbital];
       explanation = `An electron drops from <b>${t.upperOrbital}</b> (<b>${eUp.toFixed(2)} eV</b>) to <b>${t.lowerOrbital}</b> (<b>${eLow.toFixed(2)} eV</b>) within the <b>${t.family}</b> family, emitting a photon at <b>${formatTransitionNm(t)}</b>`;
